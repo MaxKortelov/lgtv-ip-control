@@ -11,7 +11,17 @@
     </cargoProject>
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="0324ae3d-651a-40bc-9945-33e1dcff18de" name="Changes" comment="updated example" />
+    <list default="true" id="0324ae3d-651a-40bc-9945-33e1dcff18de" name="Changes" comment="initial commit">
+      <change afterPath="$PROJECT_DIR$/.github/workflows/ci.yml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.github/workflows/publish.yml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/src/constants/errors.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.gitignore" beforeDir="false" afterPath="$PROJECT_DIR$/.gitignore" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Cargo.lock" beforeDir="false" afterPath="$PROJECT_DIR$/Cargo.lock" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/Cargo.toml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/constants/mod.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/constants/mod.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/lib.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/lib.rs" afterDir="false" />
+    </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -29,7 +39,22 @@
     </option>
   </component>
   <component name="Git.Settings">
+    <option name="RECENT_BRANCH_BY_REPOSITORY">
+      <map>
+        <entry key="$PROJECT_DIR$" value="main" />
+      </map>
+    </option>
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
+  </component>
+  <component name="GitRewordedCommitMessages">
+    <option name="commitMessagesMapping">
+      <RewordedCommitMessageMapping>
+        <option name="originalMessage" value="added formating" />
+        <option name="rewordedMessage" value="updated example&#10;&#10;&#10;added main.rs to gitignore &amp;&amp; updated example&#10;&#10;&#10;added formating" />
+      </RewordedCommitMessageMapping>
+    </option>
+    <option name="currentCommit" value="1" />
+    <option name="onto" value="50e24ffde3b21562d5f81f80b3bdc7394f08b9fc" />
   </component>
   <component name="MacroExpansionManager">
     <option name="directoryName" value="AZ8blLc4" />
@@ -58,8 +83,9 @@
     "RunOnceActivity.rust.reset.selective.auto.import": "true",
     "RunOnceActivity.typescript.service.memoryLimit.init": "true",
     "com.intellij.ml.llm.matterhorn.ej.ui.settings.DefaultModelSelectionForGA.v1": "true",
-    "git-widget-placeholder": "main",
+    "git-widget-placeholder": "project__setup",
     "junie.onboarding.icon.badge.shown": "true",
+    "last_opened_file_path": "/Users/max/RustroverProjects/lgtv-ip-control/.github/workflows",
     "node.js.detected.package.eslint": "true",
     "node.js.detected.package.tslint": "true",
     "node.js.selected.package.eslint": "(autodetect)",
@@ -72,6 +98,13 @@
     "vue.rearranger.settings.migration": "true"
   }
 }]]></component>
+  <component name="RecapSpentCounter">
+    <option name="endsOfQuotaMs" value="1782658867348" />
+    <option name="spentUsd" value="0.014014501" />
+  </component>
+  <component name="RecapUselessUpdatesCounter">
+    <option name="suspendCountdown" value="9" />
+  </component>
   <component name="RunManager" selected="Cargo.Run lgtv-ip-control">
     <configuration name="Run lgtv-ip-control" type="CargoCommandRunConfiguration" factoryName="Cargo Command">
       <option name="command" value="run --package lgtv-ip-control --bin lgtv-ip-control" />
@@ -118,7 +151,7 @@
       <option name="number" value="Default" />
       <option name="presentableId" value="Default" />
       <updated>1781127435987</updated>
-      <workItem from="1781127437920" duration="1283000" />
+      <workItem from="1781127437920" duration="4425000" />
     </task>
     <task id="LOCAL-00001" summary="added formating">
       <option name="closed" value="true" />
@@ -144,7 +177,15 @@
       <option name="project" value="LOCAL" />
       <updated>1781128463576</updated>
     </task>
-    <option name="localTasksCounter" value="4" />
+    <task id="LOCAL-00004" summary="initial commit">
+      <option name="closed" value="true" />
+      <created>1781129164311</created>
+      <option name="number" value="00004" />
+      <option name="presentableId" value="LOCAL-00004" />
+      <option name="project" value="LOCAL" />
+      <updated>1781129164312</updated>
+    </task>
+    <option name="localTasksCounter" value="5" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -177,6 +218,7 @@
     <MESSAGE value="added formating" />
     <MESSAGE value="added main.rs to gitignore &amp;&amp; updated example" />
     <MESSAGE value="updated example" />
-    <option name="LAST_COMMIT_MESSAGE" value="updated example" />
+    <MESSAGE value="initial commit" />
+    <option name="LAST_COMMIT_MESSAGE" value="initial commit" />
   </component>
 </project>
