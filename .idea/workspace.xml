@@ -12,14 +12,8 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="0324ae3d-651a-40bc-9945-33e1dcff18de" name="Changes" comment="setup changes">
-      <change afterPath="$PROJECT_DIR$/rust-toolchain.toml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.github/workflows/ci.yml" beforeDir="false" afterPath="$PROJECT_DIR$/.github/workflows/ci.yml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.github/workflows/publish.yml" beforeDir="false" afterPath="$PROJECT_DIR$/.github/workflows/publish.yml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/Cargo.toml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/README.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/constants/errors.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/constants/errors.rs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/examples/basic.rs" beforeDir="false" afterPath="$PROJECT_DIR$/examples/basic.rs" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -158,7 +152,7 @@
       <option name="number" value="Default" />
       <option name="presentableId" value="Default" />
       <updated>1781127435987</updated>
-      <workItem from="1781127437920" duration="6068000" />
+      <workItem from="1781127437920" duration="6776000" />
     </task>
     <task id="LOCAL-00001" summary="added formating">
       <option name="closed" value="true" />
@@ -200,7 +194,15 @@
       <option name="project" value="LOCAL" />
       <updated>1781135297185</updated>
     </task>
-    <option name="localTasksCounter" value="6" />
+    <task id="LOCAL-00006" summary="setup changes">
+      <option name="closed" value="true" />
+      <created>1781136995825</created>
+      <option name="number" value="00006" />
+      <option name="presentableId" value="LOCAL-00006" />
+      <option name="project" value="LOCAL" />
+      <updated>1781136995825</updated>
+    </task>
+    <option name="localTasksCounter" value="7" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
