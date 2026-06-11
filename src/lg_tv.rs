@@ -167,7 +167,7 @@ impl LGTV<Connected> {
     }
 
     pub async fn launch_app(&mut self, app: Apps) -> Result<(), Box<dyn std::error::Error>> {
-        let command = format!("LAUNCH_APP {:?}", app);
+        let command = format!("LAUNCH_APP {}", app.as_str());
         self.send_command(&command).await?;
         Ok(())
     }

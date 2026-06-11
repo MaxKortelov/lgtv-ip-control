@@ -12,7 +12,6 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="0324ae3d-651a-40bc-9945-33e1dcff18de" name="Changes" comment="setup changes">
-      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/lg_tv.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/lg_tv.rs" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
