@@ -267,3 +267,38 @@ pub struct AppDetails {
     pub hdcp_version: String,
     pub hdcp_status: String,
 }
+
+//Volume level type
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct VolumeLevel(u8);
+
+impl VolumeLevel {
+    pub const MIN: u8 = 0;
+    pub const MAX: u8 = 100;
+
+    pub fn new(level: u8) -> Result<Self, &'static str> {
+        if level <= Self::MAX {
+            Ok(Self(level))
+        } else {
+            Err("volume level must be between 0 and 100")
+        }
+    }
+
+    pub fn value(self) -> u8 {
+        self.0
+    }
+}
+
+impl TryFrom<u8> for VolumeLevel {
+    type Error = &'static str;
+
+    fn try_from(level: u8) -> Result<Self, Self::Error> {
+        Self::new(level)
+    }
+}
+
+impl From<VolumeLevel> for u8 {
+    fn from(level: VolumeLevel) -> Self {
+        level.value()
+    }
+}

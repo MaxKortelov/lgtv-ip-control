@@ -1,4 +1,4 @@
-use crate::constants::types::{AppDetails, Apps, ConnectionType, PowerStates};
+use crate::constants::types::{AppDetails, Apps, ConnectionType, EnergySavingLevels, Inputs, Keys, PictureModes, PowerStates, ScreenMuteModes, VolumeLevel};
 use crate::encryption::Encryption;
 use crate::tcp_connection::{Connected, Disconnected, TcpConnection};
 use regex::Regex;
@@ -168,6 +168,49 @@ impl LGTV<Connected> {
 
     pub async fn launch_app(&mut self, app: Apps) -> Result<(), Box<dyn std::error::Error>> {
         let command = format!("LAUNCH_APP {}", app.as_str());
+        self.send_command(&command).await?;
+        Ok(())
+    }
+
+    pub async fn set_picture_mode(&mut self, mode: PictureModes) -> Result<(), Box<dyn std::error::Error>> {
+        let command = format!("PICTURE_MODE {}", mode.as_str());
+        self.send_command(&command).await?;
+        Ok(())
+    }
+
+    pub async fn send_key(&mut self, key: Keys) -> Result<(), Box<dyn std::error::Error>> {
+        let command = format!("KEY_ACTION {}", key.as_str());
+        self.send_command(&command).await?;
+        Ok(())
+    }
+
+    pub async fn set_screen_mute(&mut self, mode: ScreenMuteModes) -> Result<(), Box<dyn std::error::Error>> {
+        let command = format!("SCREEN_MUTE {}", mode.as_str());
+        self.send_command(&command).await?;
+        Ok(())
+    }
+
+    pub async fn set_energy_saving(&mut self, level: EnergySavingLevels) -> Result<(), Box<dyn std::error::Error>> {
+        let command = format!("ENERGY_SAVING {}", level.as_str());
+        self.send_command(&command).await?;
+        Ok(())
+    }
+
+    pub async fn set_input(&mut self, input: Inputs) -> Result<(), Box<dyn std::error::Error>> {
+        let command = format!("INPUT_SELECT {}", input.as_str());
+        self.send_command(&command).await?;
+        Ok(())
+    }
+
+    pub async fn set_volume(&mut self, level: VolumeLevel) -> Result<(), Box<dyn std::error::Error>> {
+        let command = format!("VOLUME_CONTROL {}", level.value());
+        self.send_command(&command).await?;
+        Ok(())
+    }
+
+    pub async fn set_volume_mute(&mut self, is_muted: bool) -> Result<(), Box<dyn std::error::Error>> {
+        let action = if is_muted { "on" } else { "off" };
+        let command = format!("VOLUME_MUTE {action}");
         self.send_command(&command).await?;
         Ok(())
     }
