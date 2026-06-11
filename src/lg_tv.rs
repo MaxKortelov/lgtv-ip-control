@@ -43,19 +43,6 @@ impl LGTV<Connected> {
         })
     }
 
-    pub async fn send_command(
-        &mut self,
-        command: &str,
-    ) -> Result<String, Box<dyn std::error::Error>> {
-        let encrypted_command = self.encryption.encrypt(command)?;
-
-        let result = self.tcp_connection.send_command(encrypted_command).await?;
-
-        let decrypted_result = self.encryption.decrypt(&result)?;
-
-        Ok(decrypted_result)
-    }
-
     pub async fn power_on(
         &mut self,
         retries: Option<u8>,
@@ -77,7 +64,7 @@ impl LGTV<Connected> {
         &mut self,
         retries: Option<u8>,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        let mut attempts_left = retries.unwrap_or(5);
+        let mut attempts_left = retries.unwrap_or(10);
 
         loop {
             if attempts_left == 0 {
@@ -185,13 +172,25 @@ impl LGTV<Connected> {
         Ok(())
     }
 
+    async fn send_command(
+        &mut self,
+        command: &str,
+    ) -> Result<String, Box<dyn std::error::Error>> {
+        let encrypted_command = self.encryption.encrypt(command)?;
+
+        let result = self.tcp_connection.send_command(encrypted_command).await?;
+
+        let decrypted_result = self.encryption.decrypt(&result)?;
+
+        Ok(decrypted_result)
+    }
+
     async fn test_power_on(&mut self, retries: u8) -> Result<(), Box<dyn std::error::Error>> {
         let mut attempts_left = retries;
         loop {
-            match self.get_current_app().await? {
-                app_details if !app_details.app.is_empty() => return Ok(()),
-                d => {
-                    println!("Log {:?}", d);
+            match self.get_current_app().await {
+                Ok(app_details) if !app_details.app.is_empty() => return Ok(()),
+                _ => {
                     if attempts_left == 0 {
                         return Err("Power is off".into());
                     }
