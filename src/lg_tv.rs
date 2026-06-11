@@ -1,5 +1,8 @@
-use crate::constants::types::{AppDetails, Apps, ConnectionType, EnergySavingLevels, Inputs, Keys, PictureModes, PowerStates, ScreenMuteModes, VolumeLevel};
 use crate::constants::errors::LgTvError;
+use crate::constants::types::{
+    AppDetails, Apps, ConnectionType, EnergySavingLevels, Inputs, Keys, PictureModes, PowerStates,
+    ScreenMuteModes, VolumeLevel,
+};
 use crate::encryption::Encryption;
 use crate::tcp_connection::{Connected, Disconnected, TcpConnection};
 use regex::Regex;
@@ -50,10 +53,7 @@ impl LGTV<Connected> {
         })
     }
 
-    pub async fn power_on(
-        &mut self,
-        retries: Option<u8>,
-    ) -> Result<(), LgTvError> {
+    pub async fn power_on(&mut self, retries: Option<u8>) -> Result<(), LgTvError> {
         let attempts_left = retries.unwrap_or(10);
 
         match self.tcp_connection.wake_on_lan().await {
@@ -61,10 +61,13 @@ impl LGTV<Connected> {
             Err(error) => return Err(LgTvError::WakeOnLan(error.to_string())),
         };
 
-        let tcp_connection = match TcpConnection::new(self.tcp_connection.ip(), self.tcp_connection.mac_address()).await {
-            Ok(connection) => connection,
-            Err(error) => return Err(LgTvError::TcpConnectionError(error.to_string())),
-        };
+        let tcp_connection =
+            match TcpConnection::new(self.tcp_connection.ip(), self.tcp_connection.mac_address())
+                .await
+            {
+                Ok(connection) => connection,
+                Err(error) => return Err(LgTvError::TcpConnectionError(error.to_string())),
+            };
 
         self.tcp_connection = tcp_connection;
 
@@ -74,10 +77,7 @@ impl LGTV<Connected> {
         }
     }
 
-    pub async fn power_off(
-        &mut self,
-        retries: Option<u8>,
-    ) -> Result<(), LgTvError> {
+    pub async fn power_off(&mut self, retries: Option<u8>) -> Result<(), LgTvError> {
         let mut attempts_left = retries.unwrap_or(10);
 
         loop {
@@ -225,7 +225,10 @@ impl LGTV<Connected> {
         Ok(())
     }
 
-    pub async fn set_volume(&mut self, level: VolumeLevel) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn set_volume(
+        &mut self,
+        level: VolumeLevel,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let command = format!("VOLUME_CONTROL {}", level.value());
         self.send_command(&command).await?;
         Ok(())
@@ -238,10 +241,7 @@ impl LGTV<Connected> {
         Ok(())
     }
 
-    async fn send_command(
-        &mut self,
-        command: &str,
-    ) -> Result<String, LgTvError> {
+    async fn send_command(&mut self, command: &str) -> Result<String, LgTvError> {
         let encrypted_command = match self.encryption.encrypt(command) {
             Ok(encrypted_command) => encrypted_command,
             Err(error) => return Err(LgTvError::EncryptionError(error.to_string())),
