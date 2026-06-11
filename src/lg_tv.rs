@@ -7,7 +7,7 @@ use crate::encryption::Encryption;
 use crate::tcp_connection::{Connected, Disconnected, TcpConnection};
 use regex::Regex;
 use std::collections::HashMap;
-use tokio::time::{Duration, sleep};
+use tokio::time::{sleep, Duration};
 
 pub struct LGTV<State = Disconnected> {
     tcp_connection: TcpConnection<State>,
@@ -190,7 +190,7 @@ impl LGTV<Connected> {
     }
 
     pub async fn launch_app(&mut self, app: Apps) -> Result<(), LgTvError> {
-        let command = format!("LAUNCH_APP {}", app.as_str());
+        let command = format!("APP_LAUNCH {}", app.as_str());
         self.send_command(&command).await?;
         Ok(())
     }
