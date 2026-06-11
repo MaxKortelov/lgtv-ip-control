@@ -2,5 +2,4 @@
 .env
 *.log
 src/main.rs
-.idea/
 .DS_Store
