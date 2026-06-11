@@ -16,6 +16,10 @@ exclude = [
     ".github/",
 ]
 
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
 [dependencies]
 tokio = { version = "1", features = ["full"] }
 regex = "1"
