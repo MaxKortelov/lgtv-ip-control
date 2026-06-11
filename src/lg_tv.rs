@@ -159,10 +159,10 @@ impl LGTV<Connected> {
         }
     }
 
-    pub async fn get_power_state(&mut self) -> Result<PowerStates, Box<dyn std::error::Error>> {
+    pub async fn get_power_state(&mut self) -> PowerStates {
         match self.test_power_on(5).await {
-            Ok(_) => Ok(PowerStates::On),
-            Err(_) => Ok(PowerStates::Off),
+            Ok(_) => PowerStates::On,
+            Err(_) => PowerStates::Off,
         }
     }
 
