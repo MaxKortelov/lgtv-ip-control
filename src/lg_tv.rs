@@ -92,7 +92,7 @@ impl<C: CommandExecutor> LGTV<C, Connected> {
         self.executor
             .reconnect()
             .await
-            .map_err(|error_str| LgTvError::TcpConnectionError(error_str))?;
+            .map_err(LgTvError::TcpConnectionError)?;
 
         self.test_power_on(attempts_left).await
     }

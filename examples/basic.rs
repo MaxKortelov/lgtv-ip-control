@@ -1,5 +1,5 @@
-use lgtv_ip_control::constants::types::Apps;
 use lgtv_ip_control::LGTV;
+use lgtv_ip_control::constants::types::Apps;
 use std::time::Duration;
 use tokio::time::sleep;
 
