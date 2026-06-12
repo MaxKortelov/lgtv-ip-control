@@ -19,7 +19,7 @@ pub trait LocalCommandExecutor: Sized {
 }
 
 pub struct LGTV<C, State = Disconnected> {
-    pub executor: C,
+    executor: C,
     encryption: Encryption,
     _state: std::marker::PhantomData<State>,
 }

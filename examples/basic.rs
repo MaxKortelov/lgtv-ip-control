@@ -9,7 +9,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mac_address = "3F:F6:83:8C:1C:E8";
     let key_code = Some("GHBFXMEZ");
 
-    let mut tcp_connection = LGTV::new(ip, mac_address, key_code).await?;
+    let mut tcp_connection = LGTV::connect_tcp(ip, mac_address, key_code).await?;
 
     tcp_connection.power_on(Some(10)).await?;
 
