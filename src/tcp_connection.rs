@@ -7,6 +7,8 @@ use tokio::net::{TcpStream, UdpSocket};
 
 use crate::constants::default_settings::DefaultSettings;
 
+use crate::lg_tv::CommandExecutor;
+
 pub struct Disconnected;
 pub struct Connected;
 
@@ -53,7 +55,32 @@ impl TcpConnection<Connected> {
     pub fn mac_address(&self) -> &str {
         &self.mac_address
     }
-    pub async fn send_command(&mut self, command: Vec<u8>) -> Result<Vec<u8>, Error> {
+
+    fn create_magic_packet(&self) -> Result<Vec<u8>, &'static str> {
+        let re = Regex::new(r"(?i)^([0-9a-f]{2}:){5}([0-9a-f]{2})$").unwrap();
+
+        if !re.is_match(&self.mac_address) {
+            return Err("Invalid MAC address");
+        }
+
+        let mac_bytes: Vec<u8> = self
+            .mac_address
+            .split(':')
+            .map(|b| u8::from_str_radix(b, 16).unwrap())
+            .collect();
+
+        let mut packet = vec![0xff; 6];
+
+        for _ in 0..16 {
+            packet.extend_from_slice(&mac_bytes);
+        }
+
+        Ok(packet)
+    }
+}
+
+impl CommandExecutor for TcpConnection<Connected> {
+    async fn send_command(&mut self, command: Vec<u8>) -> Result<Vec<u8>, Error> {
         self.stream.write_all(&command).await?;
 
         let mut buffer = [0u8; 1024];
@@ -70,24 +97,7 @@ impl TcpConnection<Connected> {
         // Return only the slice of the buffer that contains real data
         Ok(buffer[..bytes_read].to_vec())
     }
-
-    pub async fn disconnect(mut self) -> Result<TcpConnection<Disconnected>, &'static str> {
-        match self.stream.shutdown().await {
-            Ok(_) => {
-                println!("TCP connection closed");
-                Ok(TcpConnection {
-                    stream: self.stream,
-                    state: PhantomData,
-                    settings: self.settings,
-                    mac_address: self.mac_address.clone(),
-                    ip: self.ip.clone(),
-                })
-            }
-            Err(_) => Err("Error closing TCP connection"),
-        }
-    }
-
-    pub async fn wake_on_lan(&self) -> Result<(), Box<dyn std::error::Error>> {
+    async fn wake_on_lan(&self) -> Result<(), Box<dyn std::error::Error>> {
         let ip: IpAddr = self.settings.network_wol_address.parse()?;
 
         let bind_addr = if ip.is_ipv6() { "[::]:0" } else { "0.0.0.0:0" };
@@ -120,25 +130,32 @@ impl TcpConnection<Connected> {
         Ok(())
     }
 
-    fn create_magic_packet(&self) -> Result<Vec<u8>, &'static str> {
-        let re = Regex::new(r"(?i)^([0-9a-f]{2}:){5}([0-9a-f]{2})$").unwrap();
-
-        if !re.is_match(&self.mac_address) {
-            return Err("Invalid MAC address");
+    async fn disconnect(mut self) -> Result<Self, &'static str> {
+        match self.stream.shutdown().await {
+            Ok(_) => {
+                println!("TCP connection closed");
+                Ok(TcpConnection {
+                    stream: self.stream,
+                    state: PhantomData,
+                    settings: self.settings,
+                    mac_address: self.mac_address.clone(),
+                    ip: self.ip.clone(),
+                })
+            }
+            Err(_) => Err("Error closing TCP connection"),
         }
+    }
 
-        let mac_bytes: Vec<u8> = self
-            .mac_address
-            .split(':')
-            .map(|b| u8::from_str_radix(b, 16).unwrap())
-            .collect();
+    async fn reconnect(&mut self) -> Result<(), String> {
+        let addr = format!("{}:{}", self.ip, self.settings.network_port);
 
-        let mut packet = vec![0xff; 6];
-
-        for _ in 0..16 {
-            packet.extend_from_slice(&mac_bytes);
+        // Re-establish the TCP stream socket connection
+        match TcpStream::connect(addr).await {
+            Ok(new_stream) => {
+                self.stream = new_stream;
+                Ok(())
+            }
+            Err(e) => Err(format!("Failed to reconnect TCP socket: {e}")),
         }
-
-        Ok(packet)
     }
 }

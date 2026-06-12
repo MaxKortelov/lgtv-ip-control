@@ -7,74 +7,94 @@ use crate::encryption::Encryption;
 use crate::tcp_connection::{Connected, Disconnected, TcpConnection};
 use regex::Regex;
 use std::collections::HashMap;
+use std::io::Error;
 use tokio::time::{sleep, Duration};
 
-pub struct LGTV<State = Disconnected> {
-    tcp_connection: TcpConnection<State>,
-    encryption: Encryption,
+#[trait_variant::make(CommandExecutor: Send)]
+pub trait LocalCommandExecutor: Sized {
+    async fn send_command(&mut self, command: Vec<u8>) -> Result<Vec<u8>, Error>;
+    async fn wake_on_lan(&self) -> Result<(), Box<dyn std::error::Error>>;
+    async fn disconnect(self) -> Result<Self, &'static str>;
+    async fn reconnect(&mut self) -> Result<(), String>;
 }
 
-impl LGTV<Disconnected> {
-    pub async fn new(
+pub struct LGTV<C, State = Disconnected> {
+    pub executor: C,
+    encryption: Encryption,
+    _state: std::marker::PhantomData<State>,
+}
+
+impl LGTV<TcpConnection<Connected>, Disconnected> {
+    pub async fn connect_tcp(
         tv_ip: &str,
         mac_address: &str,
         key: Option<&str>,
-    ) -> Result<LGTV<Connected>, LgTvError> {
+    ) -> Result<LGTV<TcpConnection<Connected>, Connected>, LgTvError> {
         let tcp_connection = match TcpConnection::new(tv_ip, mac_address).await {
             Ok(connection) => connection,
             Err(error) => return Err(LgTvError::TcpConnectionError(error.to_string())),
         };
 
-        let key_code = key.map(|k| k.to_string());
+        let lgtv_disconnected = Self::new(tcp_connection, key)?;
 
-        match key_code {
-            Some(key_code) => {
-                let encryption = Encryption::new(key_code);
-                Ok(LGTV {
-                    tcp_connection,
-                    encryption,
-                })
-            }
-            None => Err(LgTvError::MissingKeyCode),
+        Ok(lgtv_disconnected.transition_to_connected())
+    }
+}
+
+impl<C: CommandExecutor> LGTV<C, Disconnected> {
+    pub(crate) fn new(executor: C, key: Option<&str>) -> Result<Self, LgTvError> {
+        let key_code = key
+            .map(|k| k.to_string())
+            .ok_or(LgTvError::MissingKeyCode)?;
+
+        let encryption = Encryption::new(key_code);
+
+        Ok(LGTV {
+            executor,
+            encryption,
+            _state: std::marker::PhantomData,
+        })
+    }
+
+    pub(crate) fn transition_to_connected(self) -> LGTV<C, Connected> {
+        LGTV {
+            executor: self.executor,
+            encryption: self.encryption,
+            _state: std::marker::PhantomData,
         }
     }
 }
 
-impl LGTV<Connected> {
-    pub async fn disconnect(self) -> Result<LGTV<Disconnected>, LgTvError> {
-        let tcp_connection = match self.tcp_connection.disconnect().await {
+impl<C: CommandExecutor> LGTV<C, Connected> {
+    pub async fn disconnect(self) -> Result<LGTV<C, Disconnected>, LgTvError> {
+        let tcp_connection = match self.executor.disconnect().await {
             Ok(connection) => connection,
             Err(error) => return Err(LgTvError::TcpConnectionError(error.to_string())),
         };
 
         Ok(LGTV {
-            tcp_connection,
+            executor: tcp_connection,
             encryption: self.encryption,
+            _state: std::marker::PhantomData,
         })
     }
 
     pub async fn power_on(&mut self, retries: Option<u8>) -> Result<(), LgTvError> {
         let attempts_left = retries.unwrap_or(10);
 
-        match self.tcp_connection.wake_on_lan().await {
-            Ok(_) => (),
-            Err(error) => return Err(LgTvError::WakeOnLan(error.to_string())),
-        };
+        self.executor
+            .wake_on_lan()
+            .await
+            .map_err(|error| LgTvError::WakeOnLan(error.to_string()))?;
 
-        let tcp_connection =
-            match TcpConnection::new(self.tcp_connection.ip(), self.tcp_connection.mac_address())
-                .await
-            {
-                Ok(connection) => connection,
-                Err(error) => return Err(LgTvError::TcpConnectionError(error.to_string())),
-            };
+        sleep(Duration::from_millis(500)).await;
 
-        self.tcp_connection = tcp_connection;
+        self.executor
+            .reconnect()
+            .await
+            .map_err(|error_str| LgTvError::TcpConnectionError(error_str))?;
 
-        match self.test_power_on(attempts_left).await {
-            Ok(_) => Ok(()),
-            Err(error) => Err(error),
-        }
+        self.test_power_on(attempts_left).await
     }
 
     pub async fn power_off(&mut self, retries: Option<u8>) -> Result<(), LgTvError> {
@@ -247,7 +267,7 @@ impl LGTV<Connected> {
             Err(error) => return Err(LgTvError::EncryptionError(error.to_string())),
         };
 
-        let result = match self.tcp_connection.send_command(encrypted_command).await {
+        let result = match self.executor.send_command(encrypted_command).await {
             Ok(result) => result,
             Err(error) => return Err(LgTvError::SendCommand(error.to_string())),
         };
