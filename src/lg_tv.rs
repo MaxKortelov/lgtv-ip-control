@@ -316,6 +316,8 @@ mod tests {
         reconnect_called: bool,
         disconnect_called: bool,
         encryption_key: String,
+        commands_sent: Vec<String>, // Tracks all decrypted commands passed down
+        inject_error: Option<String>,
     }
 
     impl MockExecutor {
@@ -327,6 +329,8 @@ mod tests {
                     reconnect_called: false,
                     disconnect_called: false,
                     encryption_key: encryption_key.to_string(),
+                    commands_sent: Vec::new(),
+                    inject_error: None,
                 })),
             }
         }
@@ -336,6 +340,17 @@ mod tests {
                 inner.mock_response = new_response.to_string();
             }
         }
+
+        fn inject_error(&self, error_msg: &str) {
+            if let Ok(mut inner) = self.inner.lock() {
+                inner.inject_error = Some(error_msg.to_string());
+            }
+        }
+
+        fn get_last_command(&self) -> Option<String> {
+            let inner = self.inner.lock().unwrap();
+            inner.commands_sent.last().cloned()
+        }
     }
 
     // =========================================================================
@@ -343,127 +358,373 @@ mod tests {
     // =========================================================================
     impl CommandExecutor for MockExecutor {
         async fn send_command(&mut self, command: Vec<u8>) -> Result<Vec<u8>, Error> {
-            let inner = self.inner.lock().unwrap();
+            let mut inner = self.inner.lock().unwrap();
 
-            // 💡 Validate that the command arriving here can be successfully decrypted
+            if let Some(ref err_msg) = inner.inject_error {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    err_msg.clone(),
+                ));
+            }
+
             let mock_encryption = Encryption::new(inner.encryption_key.clone());
             let decrypted_command = mock_encryption.decrypt((&command).as_ref()).unwrap();
 
-            println!("Mock Received Decrypted Command: {}", decrypted_command);
+            inner.commands_sent.push(decrypted_command);
 
-            // Encrypt our configured mock response so the LGTV parser can read it properly
             let encrypted_response = mock_encryption.encrypt(&inner.mock_response).unwrap();
             Ok(encrypted_response)
         }
 
         async fn wake_on_lan(&self) -> Result<(), Box<dyn std::error::Error>> {
             let mut inner = self.inner.lock().unwrap();
+            if let Some(ref err_msg) = inner.inject_error {
+                return Err(err_msg.clone().into());
+            }
             inner.wake_on_lan_called = true;
             Ok(())
         }
 
         async fn disconnect(self) -> Result<Self, &'static str> {
             let inner_clone = self.inner.clone();
-
             let mut inner = inner_clone.lock().unwrap();
+            if let Some(ref err_msg) = inner.inject_error {
+                return Err("Failed to disconnect");
+            }
             inner.disconnect_called = true;
-
             Ok(self)
         }
 
         async fn reconnect(&mut self) -> Result<(), String> {
             let mut inner = self.inner.lock().unwrap();
+            if let Some(ref err_msg) = inner.inject_error {
+                return Err(err_msg.clone());
+            }
             inner.reconnect_called = true;
             Ok(())
         }
     }
 
     // =========================================================================
-    // 3. Test Cases
+    // Helper function to build connected TV instance cleanly
     // =========================================================================
+    fn setup_connected_tv(mock: MockExecutor, key: &str) -> LGTV<MockExecutor, Connected> {
+        let lgtv_disconnected = LGTV::new(mock, Some(key)).unwrap();
+        lgtv_disconnected.transition_to_connected()
+    }
 
+    const TEST_KEY: &str = "TESTKEY123";
+
+    // =========================================================================
+    // Method Group: LGTV::new & Initialization Edge Cases
+    // =========================================================================
+    #[test]
+    fn test_new_missing_key_code_error() {
+        let mock_executor = MockExecutor::new("", TEST_KEY);
+        let result = LGTV::new(mock_executor, None);
+
+        assert!(matches!(result, Err(LgTvError::MissingKeyCode)));
+    }
+
+    // =========================================================================
+    // Method Group: disconnect()
+    // =========================================================================
     #[tokio::test]
-    async fn test_get_current_volume_success() {
-        let key = "TESTKEY123";
-        // The mock string format expected by your Regex match parser logic
-        let mock_executor = MockExecutor::new("VOL:25", key);
+    async fn test_disconnect_success() {
+        let mock = MockExecutor::new("", TEST_KEY);
+        let tracker = mock.clone();
+        let tv = setup_connected_tv(mock, TEST_KEY);
 
-        // Setup initial wrapper instance bypass using our crate-internal constructor
-        let lgtv_disconnected = LGTV::new(mock_executor, Some(key)).unwrap();
-        let mut tv = lgtv_disconnected.transition_to_connected();
-
-        let vol = tv.get_current_volume().await.unwrap();
-        assert_eq!(vol, 25);
+        let _disconnected_tv = tv.disconnect().await.unwrap();
+        assert!(tracker.inner.lock().unwrap().disconnect_called);
     }
 
     #[tokio::test]
-    async fn test_get_current_app_success() {
-        let key = "TESTKEY123";
-        let mock_response =
-            "APP:netflix\nHot plug:yes\nSignal:true\nHDCP:2.2\nHDCP Status:authenticated";
-        let mock_executor = MockExecutor::new(mock_response, key);
+    async fn test_disconnect_failure_error_mapping() {
+        let mock = MockExecutor::new("", TEST_KEY);
+        mock.inject_error("Network Dropped");
+        let tv = setup_connected_tv(mock, TEST_KEY);
 
-        let lgtv_disconnected = LGTV::new(mock_executor, Some(key)).unwrap();
-        let mut tv = lgtv_disconnected.transition_to_connected();
-
-        let app_details = tv.get_current_app().await.unwrap();
-        assert_eq!(app_details.app, "netflix");
-        assert_eq!(app_details.hdcp_version, "2.2");
+        let result = tv.disconnect().await;
+        assert!(matches!(result, Err(LgTvError::TcpConnectionError(_))));
     }
 
+    // =========================================================================
+    // Method Group: power_on()
+    // =========================================================================
     #[tokio::test]
-    async fn test_power_on_execution_pipeline() {
-        let key = "TESTKEY123";
-        // To complete power_on loop safely, test_power_on needs to pull a valid active app response
-        let mock_executor = MockExecutor::new("APP:hdmi1", key);
-        let tracker = mock_executor.clone();
+    async fn test_power_on_success() {
+        let mock = MockExecutor::new("APP:live_tv", TEST_KEY);
+        let tracker = mock.clone();
+        let mut tv = setup_connected_tv(mock, TEST_KEY);
 
-        let lgtv_disconnected = LGTV::new(mock_executor, Some(key)).unwrap();
-        let mut tv = lgtv_disconnected.transition_to_connected();
+        let result = tv.power_on(Some(2)).await;
+        assert!(result.is_ok());
 
-        tv.power_on(Some(1)).await.unwrap();
-
-        // Check if both low level UDP/TCP transition commands fired successfully
         let inner = tracker.inner.lock().unwrap();
         assert!(inner.wake_on_lan_called);
         assert!(inner.reconnect_called);
     }
 
     #[tokio::test]
-    async fn test_power_off_retry_loop_until_success() {
-        let key = "TESTKEY123";
-        let mock_executor = MockExecutor::new("APP:youtube", key);
-        let tracker = mock_executor.clone();
+    async fn test_power_on_wol_fails() {
+        let mock = MockExecutor::new("APP:live_tv", TEST_KEY);
+        mock.inject_error("UDP socket failure");
+        let mut tv = setup_connected_tv(mock, TEST_KEY);
 
-        let lgtv_disconnected = LGTV::new(mock_executor, Some(key)).unwrap();
-        let mut tv = lgtv_disconnected.transition_to_connected();
-
-        let tracker_clone = tracker.clone();
-        tokio::spawn(async move {
-            sleep(Duration::from_millis(1500)).await;
-            // 💡 CHANGE: Use a valid string "OFF" instead of an empty string "".
-            // This ensures the crypto engine has actual text to safely encrypt,
-            // preventing the FromUtf8Error while still failing the Regex "APP:" check!
-            tracker_clone.set_response("OFF");
-        });
-
-        let result = tv.power_off(Some(5)).await;
-        assert!(result.is_ok());
+        let result = tv.power_on(Some(1)).await;
+        assert!(matches!(result, Err(LgTvError::WakeOnLan(_))));
     }
 
     #[tokio::test]
-    async fn test_disconnect_state_transition() {
-        let key = "TESTKEY123";
-        let mock_executor = MockExecutor::new("", key);
-        let tracker = mock_executor.clone();
+    async fn test_power_on_timeout_exhausted() {
+        // TV keeps returning blank data indicating it hasn't booted up yet
+        let mock = MockExecutor::new("APP:", TEST_KEY);
+        let mut tv = setup_connected_tv(mock, TEST_KEY);
 
-        let lgtv_disconnected = LGTV::new(mock_executor, Some(key)).unwrap();
-        let tv = lgtv_disconnected.transition_to_connected();
+        let result = tv.power_on(Some(1)).await; // Limit to 1 retry cycle
+        assert!(matches!(result, Err(LgTvError::PowerOff)));
+    }
 
-        // This consumes ownership of the Connected instance
-        let _disconnected_tv = tv.disconnect().await.unwrap();
+    // =========================================================================
+    // Method Group: power_off()
+    // =========================================================================
+    #[tokio::test]
+    async fn test_power_off_immediate_success() {
+        // The first test loop check fails to find an app (meaning TV shut off immediately)
+        let mock = MockExecutor::new("OFF", TEST_KEY);
+        let tracker = mock.clone();
+        let mut tv = setup_connected_tv(mock, TEST_KEY);
 
-        let inner = tracker.inner.lock().unwrap();
-        assert!(inner.disconnect_called);
+        let result = tv.power_off(Some(3)).await;
+        assert!(result.is_ok());
+        assert_eq!(tracker.get_last_command().unwrap(), "CURRENT_APP");
+    }
+
+    #[tokio::test]
+    async fn test_power_off_retries_exhausted() {
+        // TV remains permanently on, continually returning active app
+        let mock = MockExecutor::new("APP:hdmi1", TEST_KEY);
+        let mut tv = setup_connected_tv(mock, TEST_KEY);
+
+        let result = tv.power_off(Some(2)).await;
+        assert!(matches!(result, Err(LgTvError::PowerOff)));
+    }
+
+    // =========================================================================
+    // Method Group: get_current_app()
+    // =========================================================================
+    #[tokio::test]
+    async fn test_get_current_app_malformed_response() {
+        // Corrupted response configuration missing structural colons
+        let mock = MockExecutor::new("APP netflix HotPlug true", TEST_KEY);
+        let mut tv = setup_connected_tv(mock, TEST_KEY);
+
+        let details = tv.get_current_app().await.unwrap();
+        // Values default to empty strings if regex fails to match key-value formats
+        assert_eq!(details.app, "");
+    }
+
+    #[tokio::test]
+    async fn test_get_current_app_empty_string_tv_off() {
+        let mock = MockExecutor::new("", TEST_KEY);
+        let mut tv = setup_connected_tv(mock, TEST_KEY);
+
+        let result = tv.get_current_app().await;
+        assert!(matches!(result, Err(LgTvError::PowerOff)));
+    }
+
+    // =========================================================================
+    // Method Group: get_current_volume()
+    // =========================================================================
+    #[tokio::test]
+    async fn test_get_current_volume_parse_error() {
+        // Volume value contains letters, preventing numerical extraction
+        let mock = MockExecutor::new("VOL:abc", TEST_KEY);
+        let mut tv = setup_connected_tv(mock, TEST_KEY);
+
+        let result = tv.get_current_volume().await;
+        assert!(matches!(result, Err(LgTvError::ParseVolumeError)));
+    }
+
+    // =========================================================================
+    // Method Group: get_ip_control_state()
+    // =========================================================================
+    #[tokio::test]
+    async fn test_get_ip_control_state_variants() {
+        let mock = MockExecutor::new("ON", TEST_KEY);
+        let mut tv = setup_connected_tv(mock.clone(), TEST_KEY);
+        assert!(tv.get_ip_control_state().await.unwrap());
+
+        mock.set_response("OFF");
+        assert!(!tv.get_ip_control_state().await.unwrap());
+    }
+
+    // =========================================================================
+    // Method Group: get_mac_address()
+    // =========================================================================
+    #[tokio::test]
+    async fn test_get_mac_address_command_formatting() {
+        let mock = MockExecutor::new("AA:BB:CC:DD:EE:FF", TEST_KEY);
+        let tracker = mock.clone();
+        let mut tv = setup_connected_tv(mock, TEST_KEY);
+
+        let mac = tv.get_mac_address(ConnectionType::Wired).await.unwrap();
+        assert_eq!(mac, "AA:BB:CC:DD:EE:FF");
+        assert_eq!(tracker.get_last_command().unwrap(), "GET_MACADDRESS Wired");
+    }
+
+    // =========================================================================
+    // Method Group: get_mute_state()
+    // =========================================================================
+    #[tokio::test]
+    async fn test_get_mute_state_variants() {
+        let mock = MockExecutor::new("MUTE:on", TEST_KEY);
+        let mut tv = setup_connected_tv(mock.clone(), TEST_KEY);
+        assert!(tv.get_mute_state().await.unwrap());
+
+        mock.set_response("MUTE:off");
+        assert!(!tv.get_mute_state().await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn test_get_mute_state_invalid_payload_error() {
+        let mock = MockExecutor::new("MUTE:unknown", TEST_KEY);
+        let mut tv = setup_connected_tv(mock, TEST_KEY);
+
+        let result = tv.get_mute_state().await;
+
+        assert!(matches!(result, Err(LgTvError::UnableToParseMuteState)));
+    }
+
+    #[tokio::test]
+    async fn test_get_mute_state_regex_miss_error() {
+        let mock = MockExecutor::new("INVALID_MUTE_FORMAT", TEST_KEY);
+        let mut tv = setup_connected_tv(mock, TEST_KEY);
+
+        let result = tv.get_mute_state().await;
+        assert!(matches!(result, Err(LgTvError::UnableToParseMuteState)));
+    }
+
+    // =========================================================================
+    // Method Group: get_power_state()
+    // =========================================================================
+    #[tokio::test]
+    async fn test_get_power_state_variants() {
+        let mock = MockExecutor::new("APP:hdmi2", TEST_KEY);
+        let mut tv = setup_connected_tv(mock.clone(), TEST_KEY);
+
+        assert!(matches!(tv.get_power_state().await, PowerStates::On));
+
+        mock.set_response("OFF");
+        assert!(matches!(tv.get_power_state().await, PowerStates::Off));
+    }
+
+    // =========================================================================
+    // Method Group: Setters, Actions, and State Modification Vectors
+    // =========================================================================
+    #[tokio::test]
+    async fn test_launch_app_payload() {
+        let mock = MockExecutor::new("OK", TEST_KEY);
+        let tracker = mock.clone();
+        let mut tv = setup_connected_tv(mock, TEST_KEY);
+
+        tv.launch_app(Apps::Netflix).await.unwrap();
+        assert_eq!(tracker.get_last_command().unwrap(), "APP_LAUNCH netflix");
+    }
+
+    #[tokio::test]
+    async fn test_set_picture_mode_payload() {
+        let mock = MockExecutor::new("OK", TEST_KEY);
+        let tracker = mock.clone();
+        let mut tv = setup_connected_tv(mock, TEST_KEY);
+
+        tv.set_picture_mode(PictureModes::Cinema).await.unwrap();
+        assert_eq!(tracker.get_last_command().unwrap(), "PICTURE_MODE cinema");
+    }
+
+    #[tokio::test]
+    async fn test_send_key_payload() {
+        let mock = MockExecutor::new("OK", TEST_KEY);
+        let tracker = mock.clone();
+        let mut tv = setup_connected_tv(mock, TEST_KEY);
+
+        tv.send_key(Keys::VolumeMute).await.unwrap();
+        assert_eq!(tracker.get_last_command().unwrap(), "KEY_ACTION volumemute");
+    }
+
+    #[tokio::test]
+    async fn test_set_screen_mute_payload() {
+        let mock = MockExecutor::new("OK", TEST_KEY);
+        let tracker = mock.clone();
+        let mut tv = setup_connected_tv(mock, TEST_KEY);
+
+        tv.set_screen_mute(ScreenMuteModes::ScreenMuteOn)
+            .await
+            .unwrap();
+        assert_eq!(
+            tracker.get_last_command().unwrap(),
+            "SCREEN_MUTE screenmuteon"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_set_energy_saving_payload() {
+        let mock = MockExecutor::new("OK", TEST_KEY);
+        let tracker = mock.clone();
+        let mut tv = setup_connected_tv(mock, TEST_KEY);
+
+        tv.set_energy_saving(EnergySavingLevels::Maximum)
+            .await
+            .unwrap();
+        assert_eq!(tracker.get_last_command().unwrap(), "ENERGY_SAVING maximum");
+    }
+
+    #[tokio::test]
+    async fn test_set_input_payload() {
+        let mock = MockExecutor::new("OK", TEST_KEY);
+        let tracker = mock.clone();
+        let mut tv = setup_connected_tv(mock, TEST_KEY);
+
+        tv.set_input(Inputs::Hdmi1).await.unwrap();
+        assert_eq!(tracker.get_last_command().unwrap(), "INPUT_SELECT hdmi1");
+    }
+
+    #[tokio::test]
+    async fn test_set_volume_payload() {
+        let mock = MockExecutor::new("OK", TEST_KEY);
+        let tracker = mock.clone();
+        let mut tv = setup_connected_tv(mock, TEST_KEY);
+
+        tv.set_volume(VolumeLevel::try_from(12).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(tracker.get_last_command().unwrap(), "VOLUME_CONTROL 12");
+    }
+
+    #[tokio::test]
+    async fn test_set_volume_mute_payload() {
+        let mock = MockExecutor::new("OK", TEST_KEY);
+        let tracker = mock.clone();
+        let mut tv = setup_connected_tv(mock, TEST_KEY);
+
+        tv.set_volume_mute(true).await.unwrap();
+        assert_eq!(tracker.get_last_command().unwrap().trim(), "VOLUME_MUTE on");
+
+        tv.set_volume_mute(false).await.unwrap();
+        assert_eq!(
+            tracker.get_last_command().unwrap().trim(),
+            "VOLUME_MUTE off"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_send_command_underlying_network_error_propagation() {
+        let mock = MockExecutor::new("OK", TEST_KEY);
+        mock.inject_error("Broken Pipe");
+        let mut tv = setup_connected_tv(mock, TEST_KEY);
+
+        let result = tv.launch_app(Apps::Youtube).await;
+        assert!(matches!(result, Err(LgTvError::SendCommand(_))));
     }
 }
