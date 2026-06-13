@@ -7,7 +7,7 @@
 //!
 //! #[tokio::main]
 //! async fn main() -> Result<(), Box<dyn std::error::Error>> {
-//!     let mut tv = LGTV::new(
+//!     let mut tv = LGTV::connect_tcp(
 //!         "IP_ADDRESS",
 //!         "MAC_ADDRESS",
 //!         Some("KEY_CODE"),

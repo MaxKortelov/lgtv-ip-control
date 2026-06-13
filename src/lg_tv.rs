@@ -294,3 +294,176 @@ impl<C: CommandExecutor> LGTV<C, Connected> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::{Arc, Mutex};
+
+    // =========================================================================
+    // 1. Define the Mock Executor
+    // =========================================================================
+    /// A mock network layer tracking sent packets, state flags, and mock responses.
+    #[derive(Clone)]
+    struct MockExecutor {
+        // Shared mutable state across the async trait methods
+        inner: Arc<Mutex<MockInner>>,
+    }
+
+    struct MockInner {
+        mock_response: String,
+        wake_on_lan_called: bool,
+        reconnect_called: bool,
+        disconnect_called: bool,
+        encryption_key: String,
+    }
+
+    impl MockExecutor {
+        fn new(initial_response: &str, encryption_key: &str) -> Self {
+            Self {
+                inner: Arc::new(Mutex::new(MockInner {
+                    mock_response: initial_response.to_string(),
+                    wake_on_lan_called: false,
+                    reconnect_called: false,
+                    disconnect_called: false,
+                    encryption_key: encryption_key.to_string(),
+                })),
+            }
+        }
+
+        fn set_response(&self, new_response: &str) {
+            if let Ok(mut inner) = self.inner.lock() {
+                inner.mock_response = new_response.to_string();
+            }
+        }
+    }
+
+    // =========================================================================
+    // 2. Implement CommandExecutor Contract for MockExecutor
+    // =========================================================================
+    impl CommandExecutor for MockExecutor {
+        async fn send_command(&mut self, command: Vec<u8>) -> Result<Vec<u8>, Error> {
+            let inner = self.inner.lock().unwrap();
+
+            // 💡 Validate that the command arriving here can be successfully decrypted
+            let mock_encryption = Encryption::new(inner.encryption_key.clone());
+            let decrypted_command = mock_encryption.decrypt((&command).as_ref()).unwrap();
+
+            println!("Mock Received Decrypted Command: {}", decrypted_command);
+
+            // Encrypt our configured mock response so the LGTV parser can read it properly
+            let encrypted_response = mock_encryption.encrypt(&inner.mock_response).unwrap();
+            Ok(encrypted_response)
+        }
+
+        async fn wake_on_lan(&self) -> Result<(), Box<dyn std::error::Error>> {
+            let mut inner = self.inner.lock().unwrap();
+            inner.wake_on_lan_called = true;
+            Ok(())
+        }
+
+        async fn disconnect(self) -> Result<Self, &'static str> {
+            let inner_clone = self.inner.clone();
+
+            let mut inner = inner_clone.lock().unwrap();
+            inner.disconnect_called = true;
+
+            Ok(self)
+        }
+
+        async fn reconnect(&mut self) -> Result<(), String> {
+            let mut inner = self.inner.lock().unwrap();
+            inner.reconnect_called = true;
+            Ok(())
+        }
+    }
+
+    // =========================================================================
+    // 3. Test Cases
+    // =========================================================================
+
+    #[tokio::test]
+    async fn test_get_current_volume_success() {
+        let key = "TESTKEY123";
+        // The mock string format expected by your Regex match parser logic
+        let mock_executor = MockExecutor::new("VOL:25", key);
+
+        // Setup initial wrapper instance bypass using our crate-internal constructor
+        let lgtv_disconnected = LGTV::new(mock_executor, Some(key)).unwrap();
+        let mut tv = lgtv_disconnected.transition_to_connected();
+
+        let vol = tv.get_current_volume().await.unwrap();
+        assert_eq!(vol, 25);
+    }
+
+    #[tokio::test]
+    async fn test_get_current_app_success() {
+        let key = "TESTKEY123";
+        let mock_response =
+            "APP:netflix\nHot plug:yes\nSignal:true\nHDCP:2.2\nHDCP Status:authenticated";
+        let mock_executor = MockExecutor::new(mock_response, key);
+
+        let lgtv_disconnected = LGTV::new(mock_executor, Some(key)).unwrap();
+        let mut tv = lgtv_disconnected.transition_to_connected();
+
+        let app_details = tv.get_current_app().await.unwrap();
+        assert_eq!(app_details.app, "netflix");
+        assert_eq!(app_details.hdcp_version, "2.2");
+    }
+
+    #[tokio::test]
+    async fn test_power_on_execution_pipeline() {
+        let key = "TESTKEY123";
+        // To complete power_on loop safely, test_power_on needs to pull a valid active app response
+        let mock_executor = MockExecutor::new("APP:hdmi1", key);
+        let tracker = mock_executor.clone();
+
+        let lgtv_disconnected = LGTV::new(mock_executor, Some(key)).unwrap();
+        let mut tv = lgtv_disconnected.transition_to_connected();
+
+        tv.power_on(Some(1)).await.unwrap();
+
+        // Check if both low level UDP/TCP transition commands fired successfully
+        let inner = tracker.inner.lock().unwrap();
+        assert!(inner.wake_on_lan_called);
+        assert!(inner.reconnect_called);
+    }
+
+    #[tokio::test]
+    async fn test_power_off_retry_loop_until_success() {
+        let key = "TESTKEY123";
+        let mock_executor = MockExecutor::new("APP:youtube", key);
+        let tracker = mock_executor.clone();
+
+        let lgtv_disconnected = LGTV::new(mock_executor, Some(key)).unwrap();
+        let mut tv = lgtv_disconnected.transition_to_connected();
+
+        let tracker_clone = tracker.clone();
+        tokio::spawn(async move {
+            sleep(Duration::from_millis(1500)).await;
+            // 💡 CHANGE: Use a valid string "OFF" instead of an empty string "".
+            // This ensures the crypto engine has actual text to safely encrypt,
+            // preventing the FromUtf8Error while still failing the Regex "APP:" check!
+            tracker_clone.set_response("OFF");
+        });
+
+        let result = tv.power_off(Some(5)).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_disconnect_state_transition() {
+        let key = "TESTKEY123";
+        let mock_executor = MockExecutor::new("", key);
+        let tracker = mock_executor.clone();
+
+        let lgtv_disconnected = LGTV::new(mock_executor, Some(key)).unwrap();
+        let tv = lgtv_disconnected.transition_to_connected();
+
+        // This consumes ownership of the Connected instance
+        let _disconnected_tv = tv.disconnect().await.unwrap();
+
+        let inner = tracker.inner.lock().unwrap();
+        assert!(inner.disconnect_called);
+    }
+}
