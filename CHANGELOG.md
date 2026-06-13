@@ -6,3 +6,9 @@
 - Async LG TV IP Control client.
 - App launching support.
 - Volume, mute, input, picture mode, and power control helpers.
+
+## [0.1.1] - 2026-06-10
+
+### Added
+
+- Removes duplicate LgTvError Enum
