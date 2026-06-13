@@ -62,7 +62,7 @@ use crate::tcp_connection::{Connected, Disconnected, TcpConnection};
 use regex::Regex;
 use std::collections::HashMap;
 use std::io::Error;
-use tokio::time::{Duration, sleep};
+use tokio::time::{sleep, Duration};
 
 #[trait_variant::make(CommandExecutor: Send)]
 pub trait LocalCommandExecutor: Sized {
@@ -80,7 +80,6 @@ pub trait LocalCommandExecutor: Sized {
 /// - `LGTV<Connected>` represents a connected client.
 ///
 /// Most control methods are only available after a successful connection.
-
 pub struct LGTV<C, State = Disconnected> {
     executor: C,
     encryption: Encryption,
@@ -491,14 +490,11 @@ mod tests {
             let mut inner = self.inner.lock().unwrap();
 
             if let Some(ref err_msg) = inner.inject_error {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    err_msg.clone(),
-                ));
+                return Err(std::io::Error::other(err_msg.clone()));
             }
 
             let mock_encryption = Encryption::new(inner.encryption_key.clone());
-            let decrypted_command = mock_encryption.decrypt((&command).as_ref()).unwrap();
+            let decrypted_command = mock_encryption.decrypt((command).as_ref()).unwrap();
 
             inner.commands_sent.push(decrypted_command);
 
@@ -518,7 +514,7 @@ mod tests {
         async fn disconnect(self) -> Result<Self, &'static str> {
             let inner_clone = self.inner.clone();
             let mut inner = inner_clone.lock().unwrap();
-            if let Some(ref err_msg) = inner.inject_error {
+            if let Some(ref _err_msg) = inner.inject_error {
                 return Err("Failed to disconnect");
             }
             inner.disconnect_called = true;
