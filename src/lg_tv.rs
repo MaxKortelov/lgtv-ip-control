@@ -62,7 +62,7 @@ use crate::tcp_connection::{Connected, Disconnected, TcpConnection};
 use regex::Regex;
 use std::collections::HashMap;
 use std::io::Error;
-use tokio::time::{sleep, Duration};
+use tokio::time::{Duration, sleep};
 
 #[trait_variant::make(CommandExecutor: Send)]
 pub trait LocalCommandExecutor: Sized {
