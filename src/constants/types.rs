@@ -1,9 +1,14 @@
+/// Network connection type used by the TV.
 #[derive(Debug)]
 pub enum ConnectionType {
+    /// Wired Ethernet connection.
     Wired,
+
+    /// Wi-Fi connection.
     Wifi,
 }
 
+/// Known LG webOS apps that can be launched.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Apps {
     Amazon,
